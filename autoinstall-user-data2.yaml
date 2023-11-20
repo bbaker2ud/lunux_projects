@@ -1,0 +1,244 @@
+#cloud-config
+autoinstall:
+  apt: 
+    disable_components: []
+    fallback: abort
+    geoip: true
+    mirror-selection: 
+      primary: 
+      - country-mirror
+      - arches: 
+        - amd64
+        - i386
+        uri: http://archive.ubuntu.com/ubuntu
+      - arches: 
+        - s390x
+        - arm64
+        - armhf
+        - powerpc
+        - ppc64el
+        - riscv64
+        uri: http://ports.ubuntu.com/ubuntu-ports
+    preserve_sources_list: false
+  codecs: 
+    install: false
+  drivers: 
+    install: false
+  identity: 
+    hostname: aswl110324
+    password: $6$vZovKOf.c898w6.l$GPl/Dn2QMTH73fFd6obrPTR/igYQeQyrNG3wFd8Z5nz1hYQN5UeFXD5bOqVSAllrXMAy3QyvFwi7skDtLcI/Z0
+    realname: admina
+    username: admina
+  kernel: 
+    package: linux-generic
+  keyboard: 
+    layout: us
+    toggle: null
+    variant: ''
+  locale: en_US.UTF-8
+  network: 
+    ethernets: 
+      enth0: 
+        dhcp4: true
+    version: 2
+  source: 
+    id: ubuntu-server
+    search_drivers: false
+  ssh: 
+    allow-pw: true
+    authorized-keys: []
+    install-server: true
+  storage: 
+    version: 1
+    config: 
+    - id: disk0
+      type: disk
+      ptable: gpt
+      wipe: superblock-recursive
+      preserve: false
+      name: ''
+      grub_device: false
+    - id: disk0p0
+      type: partition
+      number: 1
+      size: 1 G
+      wipe: superblock
+      preserve: false
+      grub_device: true
+      flag: boot
+      device: disk0
+    - id: disk0p1
+      type: partition
+      number: 2
+      preserve: false
+      grub_device: false      
+      size: 20G
+      wipe: superblock
+      device: disk0
+    - id: disk0p2
+      type: partition
+      number: 3
+      preserve: false
+      grub_device: false
+      size: 16G
+      flag: swap
+      wipe: superblock
+      device: disk0
+    - id: disk0p3
+      type: partition
+      number: 4
+      size: 2G
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0
+    - id: disk0p4
+      type: partition
+      number: 5
+      size: 2G
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0    
+    - id: disk0p5
+      type: partition
+      number: 6
+      size: 16G
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0
+    - id: disk0p6
+      type: partition
+      number: 7
+      size: 2G
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0
+    - id: disk0p7
+      type: partition
+      number: 8
+      size: 5G
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0
+    - id: disk0p8
+      type: partition
+      number: 9
+      size: 5G
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0
+    - id: disk0p9
+      type: partition
+      number: 10
+      size: -1
+      preserve: false
+      grub_device: false
+      wipe: superblock
+      device: disk0
+    - id: format_boot
+      type: format
+      fstype: fat32
+      volume: disk0p0
+      preserve: false
+    - id: format_root
+      type: format
+      fstype: ext4
+      volume: disk0p1
+      preserve: false
+    - id: format_swap
+      type: format
+      fstype: swap
+      volume: disk0p2
+      preserve: false
+    - id: format_varlogaudit
+      type: format
+      fstype: ext4
+      volume: disk0p3
+      preserve: false
+    - id: format_varlog
+      type: format
+      fstype: ext4
+      volume: disk0p4
+      preserve: false
+    - id: format_tmp
+      type: format
+      fstype: ext4
+      volume: disk0p5
+      preserve: false
+    - id: format_vartmp
+      type: format
+      fstype: ext4
+      volume: disk0p6
+      preserve: false
+    - id: format_var
+      type: format
+      fstype: ext4
+      volume: disk0p7
+      preserve: false
+    - id: format_usr
+      type: format
+      fstype: ext4
+      volume: disk0p8
+      preserve: false
+    - id: format_home
+      type: format
+      fstype: ext4
+      volume: disk0p9
+      preserve: false
+    - id: mount1
+      type: mount
+      device: format_boot
+      path: /boot/efi
+    - id: mount2
+      type: mount
+      device: format_root
+      path: /
+    - id: mount3
+      type: mount
+      device: format_swap
+      path: ''
+    - id: mount4
+      type: mount
+      device: format_varlogaudit
+      path: /var/log/audit
+    - id: mount5
+      type: mount
+      device: format_varlog
+      path: /var/log
+    - id: mount6
+      type: mount
+      device: format_tmp
+      path: /tmp
+    - id: mount7
+      type: mount
+      device: format_vartmp
+      path: /var/tmp
+    - id: mount8
+      type: mount
+      device: format_var
+      path: /var
+    - id: mount9
+      type: mount
+      device: format_usr
+      path: /usr
+    - id: mount10
+      type: mount
+      device: format_home
+      path: /home
+    swap: 
+      size: 0
+  packages: 
+    - xorg
+    - xserver-xorg
+    - x11-xserver-utils
+    - xinit
+    - openbox
+  package_update: true
+  package_upgrade: true
+  updates: all
+  version: 1

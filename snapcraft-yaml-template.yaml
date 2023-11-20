@@ -1,0 +1,13 @@
+name: vmware-view-snap
+summary: Snap version of VMware Horizon Client 2306 8.10.0.
+description: |
+  I put all this in a snap yo.
+
+version: 1.0
+base: core20
+grade: devel
+confinement: devmode
+
+parts: 
+  vmware:
+    plugin: nil
