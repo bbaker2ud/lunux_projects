@@ -1,9 +1,9 @@
 #!/bin/bash
 #Run as root
 
-BASH_PROFILE=".bash_profile"
+BASH_PROFILE="/root/.bash_profile"
 PROFILE="./script.sh"
-STATUS_LOG="status.log"
+STATUS_LOG="/root/status.log"
 
 # Determine whether the .bash_profile file exists ? get the profile : set the profile 
 if [[ -f $BASH_PROFILE ]]
