@@ -1,0 +1,98 @@
+#cloud-config
+autoinstall:
+  apt:
+    disable_components: []
+    fallback: abort
+    geoip: true
+    mirror-selection:
+      primary:
+      - country-mirror
+      - arches:
+        - amd64
+        - i386
+        uri: http://archive.ubuntu.com/ubuntu
+      - arches:
+        - s390x
+        - arm64
+        - armhf
+        - powerpc
+        - ppc64el
+        - riscv64
+        uri: http://ports.ubuntu.com/ubuntu-ports
+    preserve_sources_list: false
+  codecs:
+    install: false
+  drivers:
+    install: false
+  identity:
+    hostname: aswl110324
+    password: $6$vZovKOf.c898w6.l$GPl/Dn2QMTH73fFd6obrPTR/igYQeQyrNG3wFd8Z5nz1hYQN5UeFXD5bOqVSAllrXMAy3QyvFwi7skDtLcI/Z0
+    realname: admina
+    username: admina
+  kernel:
+    package: linux-generic
+  keyboard:
+    layout: us
+    toggle: null
+    variant: ''
+  locale: en_US.UTF-8
+  source:
+    id: ubuntu-server
+    search_drivers: false
+  ssh:
+    allow-pw: true
+    authorized-keys: []
+    install-server: true
+  storage:
+    layout: 
+      name: direct
+  version: 1
+  late-commands:
+    - |
+      rm /target/etc/netplan/00-installer-config.yaml
+      cat <<EOF > /target/etc/netplan/80-my.yaml
+      network:
+        version: 2
+        ethernets:
+          zz-all-en:
+            match:
+                name: "en*"
+            dhcp4: true
+          zz-all-eth:
+            match:
+                name: "eth*"
+            dhcp4: true
+      EOF
+    # Write a script that can take care of some post install setup "late-commands" cannot be interactive unfortunately"
+    # - |
+    #   cat <<EOF | sudo tee /target/etc/finish-install-setup.sh
+    #   #!/usr/bin/env bash
+    #   echo *************************
+    #   echo ****  Finish Setup   ****
+    #   echo ************************* 
+    #   echo 'Enter the hostname for this system: '
+    #   read NEW_HOSTNAME
+    #   hostnamectl set-hostname \${NEW_HOSTNAME}
+    #   echo *************************
+    #   echo
+    #   echo *************************
+    #   echo 'Restarting to finish ...'
+    #   shutdown -r 3
+    #   EOF
+    # - curtin in-target --target /target chmod 744 /etc/finish-install-setup.sh
+  user-data: # Commands here run during first boot (cannot be interactive)
+    runcmd:
+      # Install the NVIDIA driver from the ppa we setup earlier
+      # - [apt-get, update]
+      # - [apt-get, dist-upgrade, --yes]
+      # - [apt, autoremove, --yes]
+      # - [apt, --yes, install, xorg, xserver-xorg, x11-xserver-utils, xinit, openbox]
+      - [mkdir, /etc/systemd/system/getty@.service.d]
+      - [wget, "https://raw.githubusercontent.com/bbaker2ud/lunux_projects/main/override.conf"]
+      - [mv, override.conf, /etc/systemd/system/getty@.service.d/override.conf]
+      - [passwd, -d, root]
+      - [wget, "https://raw.githubusercontent.com/bbaker2ud/lunux_projects/main/script.sh" ]
+      - [chmod, +x, script.sh]
+      - [mv, script.sh, /root/script.sh]
+      # - [bash, /root/script.sh]
+  
