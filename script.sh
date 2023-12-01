@@ -59,17 +59,6 @@ update()
         reboot
 }
 
-installPython2()
-{
-        apt install -y python2 &&
-        CURRENT_STATUS="stage2"
-        echo "$CURRENT_STATUS : $(date)"
-        echo "$CURRENT_STATUS" > "$STATUS_LOG"
-        echo "Python 2 installed. Rebooting now."
-        sleep 3 &&
-        reboot
-}
-
 installDisplayManagerComponents()
 {
         autostart="/etc/xdg/openbox/autostart" &&
@@ -114,13 +103,11 @@ stage0)
   update
   ;;
 stage1)
-  installPython2
-  ;;
-stage2)
   installDisplayManagerComponents
   installVMwareHorizonClient
-  installOpenSSH
   reconfigureBashProfile
+  ;;
+stage2)
   ;;
 stage3)
   echo "The script '$0' is finished."
