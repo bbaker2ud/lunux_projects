@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Installing realmd..." &&
-apt-get install realmd &&
+apt -y install realmd &&
 echo "Discovering realm..." &&
 realm discover adws.udayton.edu &&
 success=0 &&
