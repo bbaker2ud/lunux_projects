@@ -1,14 +1,19 @@
 #!/bin/bash
 echo "Installing cifs-utils..." &&
-apt-get install cifs-utils &&
-echo "Creating creds..." &&
-echo "username=bbaker2" >> /root/.creds &&
-echo "password=2632newJob!" >> /root/.creds &&
+apt -y install cifs-utils &&
 echo "Changing permissions..." &&
-chmod 400 /root/.creds &&
 echo "Mounting network share..." &&
-mkdir /media/share &&
-mount -t cifs -o rw,vers=3.0,credentials=/root/.creds //itsmldcs1.adws.udayton.edu/ldlogon/unix /media/share &&
+mkdir /media/share ||
+good=0 &&
+until [ $good -ge 1 ]; do
+  mount -v -t cifs -o rw,vers=3.0,credentials=/etc/cifs-credentials //itsmldcs1.adws.udayton.edu/ldlogon/unix /media/share
+	if [ $? -eq 0 ]; then
+		good=1
+		echo "success=$good"
+	else
+		echo "success=$good"
+	fi
+done
 echo "Creating temporary directory..." &&
 mkdir -p /tmp/ems &&
 echo "Downloading nixconfig.sh..." &&
