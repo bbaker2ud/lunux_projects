@@ -63,7 +63,7 @@ installDisplayManagerComponents()
 {
         autostart="/etc/xdg/openbox/autostart" &&
         apt install -y xorg xserver-xorg x11-xserver-utils xinit openbox &&
-        echo -e "\nxset s off\n\nxset s noblank\n\nxset -dpms\n\nsetxkbmap -option terminate:ctrl_alt_bksp\n\n#setxkbmap -option srvrkeys:none" >> $autostart
+        echo -e "\nxrandr -s 1920x1080\n\nxset s off\n\nxset s noblank\n\nxset -dpms\n\nsetxkbmap -option terminate:ctrl_alt_bksp\n\n#setxkbmap -option srvrkeys:none" >> $autostart
         echo -e "\n\nvmware-view --serverURL=vdigateway.udayton.edu --fullscreen --nomenubar --allSessionsDisconnectedBehavior='Logoff' --usbAutoConnectOnInsert='TRUE'" >> $autostart
         CURRENT_STATUS="stage3"
         echo "$CURRENT_STATUS : $(date)"
