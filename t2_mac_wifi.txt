@@ -7,5 +7,5 @@ sudo apt download apple-firmware
 
 sudo dpkg -i apple-firmware*.deb
 
-curl -s --compressed "https://github.com/bbaker2ud/main/t2-ubuntu-repo/KEY.gpg" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/t2-ubuntu-repo.gpg >/dev/null
+curl -s --compressed "https://github.com/bbaker2ud/t2-ubuntu-repo/KEY.gpg" | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/t2-ubuntu-repo.gpg >/dev/null
 echo "deb [signed-by=/etc/apt/trusted.gpg.d/t2-ubuntu-repo.gpg] https://github.com/bbaker2ud/Apple-Firmware/releases/download/debian ./" | sudo tee -a /etc/apt/sources.list.d/t2.list
