@@ -35,7 +35,6 @@ EOF
 }
 
 initialize_bash_profile() {
-    # Only write if .bash_profile doesn't exist
     if [[ ! -f $BASH_PROFILE ]]; then
         echo "Initializing .bash_profile..."
         cat <<EOF > "$BASH_PROFILE"
@@ -44,17 +43,14 @@ initialize_bash_profile() {
 # Debug: Log that we are in .bash_profile
 echo "\$(date) : .bash_profile executed" >> /root/login.log
 
-# Start X session if on the main console and no DISPLAY
-[[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]] && exec startx
-
-# If main script and status log exist, continue the main script
+# After auto-login, continue the main script until final stage
 if [[ -f "$MAIN_SCRIPT" && -f "$STATUS_LOG" ]]; then
     bash "$MAIN_SCRIPT"
 fi
 EOF
     fi
 
-    # Ensure no .profile or .bash_login that might interfere
+    # Remove any other conflicting profile files
     rm -f /root/.profile /root/.bash_login
 }
 
@@ -93,7 +89,7 @@ install_dependencies() {
     apt install -y \
         xorg xserver-xorg x11-xserver-utils xinit openbox \
         openssh-server ufw wget realmd cifs-utils python3-pip curl \
-        pipx unzip net-tools software-properties-common
+        unzip pipx net-tools software-properties-common
 
     # Enable and configure firewall
     ufw enable
@@ -228,11 +224,16 @@ create_xinitrc() {
     echo ".xinitrc created."
 }
 
+enable_startx_in_bash_profile() {
+    echo "Enabling startx in .bash_profile..."
+    # Add startx line above the main script call to ensure it launches GUI on next login
+    sed -i '/# After auto-login, continue the main script until final stage/i [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]] && exec startx' "$BASH_PROFILE"
+}
+
 #############################################
 # Main Execution Flow
 #############################################
 
-# Ensure main script and directories
 mkdir -p "$SCRIPT_DIR"
 if [[ "$0" != "$MAIN_SCRIPT" ]]; then
     cp "$0" "$MAIN_SCRIPT"
@@ -270,6 +271,7 @@ case "$CURRENT_STATUS" in
         configure_openbox_autostart
         install_vmware_horizon
         create_xinitrc
+        enable_startx_in_bash_profile
         set_status "stage3"
         echo "Rebooting now..."
         reboot
@@ -277,8 +279,7 @@ case "$CURRENT_STATUS" in
 
     stage3)
         echo "The script '$0' has completed all stages."
-        echo "On this final boot, root will auto-login, .bash_profile will run startx,"
-        echo ".xinitrc will launch openbox-session, and VMware Horizon will autostart."
+        echo "Now, upon autologin, startx will run, launching openbox-session and VMware Horizon."
         ;;
     *)
         echo "Unknown status. Exiting."
