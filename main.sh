@@ -4,7 +4,7 @@
 #############################################
 # Variables and Paths
 #############################################
-BASH_PROFILE="/root/.bash_profile"
+PROFILE="/root/.profile"
 STATUS_LOG="/root/status.log"
 SCRIPT_DIR="/root/scripts"
 MAIN_SCRIPT="${SCRIPT_DIR}/main.sh"
@@ -34,17 +34,16 @@ EOF
     echo "Root auto-login configured."
 }
 
-initialize_bash_profile() {
-    # Only write to .bash_profile if it doesn't exist
-    if [[ ! -f $BASH_PROFILE ]]; then
-        echo "Initializing .bash_profile..."
-        cat <<EOF > "$BASH_PROFILE"
-# .bash_profile created on $(date)
-
-# Start X session if on the main console and not already in a DISPLAY
+initialize_profile() {
+    # Only write if .profile doesn't exist
+    if [[ ! -f $PROFILE ]]; then
+        echo "Initializing .profile..."
+        cat <<EOF > "$PROFILE"
+# .profile created on $(date)
+# Start X session if on the main console and no DISPLAY
 [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]] && exec startx
 
-# Continue main script after login if it exists and not completed
+# If main script and status log exist, continue the main script
 if [[ -f "$MAIN_SCRIPT" && -f "$STATUS_LOG" ]]; then
     bash "$MAIN_SCRIPT"
 fi
@@ -53,7 +52,6 @@ EOF
 }
 
 initialize_status_log() {
-    # Only initialize if not present
     if [[ ! -f $STATUS_LOG ]]; then
         echo "Initializing status log..."
         echo "stage0 : $(date)" > "$STATUS_LOG"
@@ -96,41 +94,11 @@ install_dependencies() {
     echo "All dependencies installed."
 }
 
-configure_openbox_autostart() {
-    echo "Configuring Openbox autostart..."
-    mkdir -p /etc/xdg/openbox/
-    cat <<EOF > "$OPENBOX_AUTOSTART"
-xrandr -s 1920x1080
-xset s off
-xset s noblank
-xset -dpms
-setxkbmap -option terminate:ctrl_alt_bksp
-vmware-view --serverURL=vdigateway.udayton.edu --fullscreen --nomenubar \
-    --allSessionsDisconnectedBehavior='Logoff' --usbAutoConnectOnInsert='TRUE'
-EOF
-}
-
-install_vmware_horizon() {
-    echo "Installing VMware Horizon Client..."
-    wget -q "$HORIZON_CLIENT_URL" -O "$HORIZON_CLIENT_BUNDLE"
-    chmod +x "$HORIZON_CLIENT_BUNDLE"
-    env TERM=dumb ./"$HORIZON_CLIENT_BUNDLE" --console --required
-    rm -f "$HORIZON_CLIENT_BUNDLE"
-    echo "VMware Horizon Client installed."
-}
-
 configure_ssh() {
-    echo "Configuring OpenSSH..."
+    echo "Configuring SSH..."
     systemctl enable ssh
     ufw allow ssh
-    echo "OpenSSH configured."
-}
-
-configure_updates_cron() {
-    echo "Setting up updates cron job..."
-    mkdir -p /var/spool/cron/crontabs
-    echo "0 0 1 * * /root/scripts/updates.sh" >> /var/spool/cron/crontabs/root
-    echo "Cron job for monthly updates set."
+    echo "SSH configured."
 }
 
 configure_sudoers() {
@@ -142,6 +110,13 @@ configure_sudoers() {
         echo "%cas.role.administrators.casit.workstations@adws.udayton.edu ALL=(ALL) ALL"
     } >> /etc/sudoers
     echo "Sudoers configured."
+}
+
+configure_updates_cron() {
+    echo "Setting up updates cron job..."
+    mkdir -p /var/spool/cron/crontabs
+    echo "0 0 1 * * /root/scripts/updates.sh" >> /var/spool/cron/crontabs/root
+    echo "Cron job for monthly updates set."
 }
 
 join_realm() {
@@ -214,6 +189,38 @@ install_ivanti_agent() {
     echo "Ivanti Agent installed."
 }
 
+configure_openbox_autostart() {
+    echo "Configuring Openbox autostart..."
+    mkdir -p /etc/xdg/openbox/
+    cat <<EOF > "$OPENBOX_AUTOSTART"
+xrandr -s 1920x1080
+xset s off
+xset s noblank
+xset -dpms
+setxkbmap -option terminate:ctrl_alt_bksp
+vmware-view --serverURL=vdigateway.udayton.edu --fullscreen --nomenubar \
+    --allSessionsDisconnectedBehavior='Logoff' --usbAutoConnectOnInsert='TRUE'
+EOF
+    echo "Openbox autostart configured."
+}
+
+install_vmware_horizon() {
+    echo "Installing VMware Horizon Client..."
+    wget -q "$HORIZON_CLIENT_URL" -O "$HORIZON_CLIENT_BUNDLE"
+    chmod +x "$HORIZON_CLIENT_BUNDLE"
+    env TERM=dumb ./"$HORIZON_CLIENT_BUNDLE" --console --required
+    rm -f "$HORIZON_CLIENT_BUNDLE"
+    echo "VMware Horizon Client installed."
+}
+
+create_xinitrc() {
+    echo "Creating .xinitrc..."
+    echo "exec openbox-session" > /root/.xinitrc
+    chown root:root /root/.xinitrc
+    chmod 644 /root/.xinitrc
+    echo ".xinitrc created."
+}
+
 #############################################
 # Main Execution Flow
 #############################################
@@ -225,7 +232,7 @@ if [[ "$0" != "$MAIN_SCRIPT" ]]; then
     chmod +x "$MAIN_SCRIPT"
 fi
 
-initialize_bash_profile
+initialize_profile
 initialize_status_log
 CURRENT_STATUS=$(get_current_status)
 
@@ -240,18 +247,6 @@ case "$CURRENT_STATUS" in
 
     stage1)
         install_dependencies
-        configure_openbox_autostart
-        install_vmware_horizon
-        # Add the startx directive again (redundant check, but safe)
-        if ! grep -q "exec startx" "$BASH_PROFILE"; then
-            echo '[[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx' >> "$BASH_PROFILE"
-        fi
-        set_status "stage2"
-        echo "Rebooting now..."
-        reboot
-        ;;
-
-    stage2)
         configure_ssh
         configure_sudoers
         configure_updates_cron
@@ -259,6 +254,15 @@ case "$CURRENT_STATUS" in
         install_falcon_sensor
         mount_network_share
         install_ivanti_agent
+        set_status "stage2"
+        echo "Rebooting now..."
+        reboot
+        ;;
+
+    stage2)
+        configure_openbox_autostart
+        install_vmware_horizon
+        create_xinitrc
         set_status "stage3"
         echo "Rebooting now..."
         reboot
@@ -266,7 +270,8 @@ case "$CURRENT_STATUS" in
 
     stage3)
         echo "The script '$0' has completed all stages."
-        echo "Upon reboot, VMware Horizon Client will load automatically."
+        echo "Upon this final reboot, root will auto-login, '.profile' will run 'startx',"
+        echo "which will launch 'openbox-session' from '.xinitrc', and Openbox autostart will run VMware Horizon."
         ;;
     *)
         echo "Unknown status. Exiting."
