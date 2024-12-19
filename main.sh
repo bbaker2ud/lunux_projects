@@ -93,7 +93,7 @@ install_dependencies() {
     apt install -y \
         xorg xserver-xorg x11-xserver-utils xinit openbox \
         openssh-server ufw wget realmd cifs-utils python3-pip curl \
-        unzip net-tools software-properties-common
+        pipx unzip net-tools software-properties-common
 
     # Enable and configure firewall
     ufw enable
@@ -155,7 +155,7 @@ join_realm() {
 
 install_falcon_sensor() {
     echo "Installing Falcon Sensor..."
-    pip install gdown
+    pipx install gdown
     gdown 1YnvSQmCgUE0lRs5Fauvfub_KsUhcnbCw -O falcon-sensor.deb
     dpkg --install falcon-sensor.deb
     /opt/CrowdStrike/falconctl -s --cid="$CROWDSTRIKE_CID"
