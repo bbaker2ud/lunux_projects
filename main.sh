@@ -4,7 +4,7 @@
 #############################################
 # Variables and Paths
 #############################################
-PROFILE="/root/.profile"
+BASH_PROFILE="/root/.bash_profile"
 STATUS_LOG="/root/status.log"
 SCRIPT_DIR="/root/scripts"
 MAIN_SCRIPT="${SCRIPT_DIR}/main.sh"
@@ -34,12 +34,16 @@ EOF
     echo "Root auto-login configured."
 }
 
-initialize_profile() {
-    # Only write if .profile doesn't exist
-    if [[ ! -f $PROFILE ]]; then
-        echo "Initializing .profile..."
-        cat <<EOF > "$PROFILE"
-# .profile created on $(date)
+initialize_bash_profile() {
+    # Only write if .bash_profile doesn't exist
+    if [[ ! -f $BASH_PROFILE ]]; then
+        echo "Initializing .bash_profile..."
+        cat <<EOF > "$BASH_PROFILE"
+# .bash_profile created on $(date)
+
+# Debug: Log that we are in .bash_profile
+echo "\$(date) : .bash_profile executed" >> /root/login.log
+
 # Start X session if on the main console and no DISPLAY
 [[ -z \$DISPLAY && \$XDG_VTNR -eq 1 ]] && exec startx
 
@@ -49,6 +53,9 @@ if [[ -f "$MAIN_SCRIPT" && -f "$STATUS_LOG" ]]; then
 fi
 EOF
     fi
+
+    # Ensure no .profile or .bash_login that might interfere
+    rm -f /root/.profile /root/.bash_login
 }
 
 initialize_status_log() {
@@ -138,8 +145,8 @@ join_realm() {
     done
 
     echo "Permitting domain user logins..."
-    realm permit -g 'domain users@'"$AD_DOMAIN"
-    realm permit -g 'cas.role.administrators.casit.workstations@'"$AD_DOMAIN"
+    realm permit -g "domain users@$AD_DOMAIN"
+    realm permit -g "cas.role.administrators.casit.workstations@$AD_DOMAIN"
 
     # Enable home directory creation
     pam-auth-update --enable mkhomedir
@@ -232,7 +239,7 @@ if [[ "$0" != "$MAIN_SCRIPT" ]]; then
     chmod +x "$MAIN_SCRIPT"
 fi
 
-initialize_profile
+initialize_bash_profile
 initialize_status_log
 CURRENT_STATUS=$(get_current_status)
 
@@ -270,8 +277,8 @@ case "$CURRENT_STATUS" in
 
     stage3)
         echo "The script '$0' has completed all stages."
-        echo "Upon this final reboot, root will auto-login, '.profile' will run 'startx',"
-        echo "which will launch 'openbox-session' from '.xinitrc', and Openbox autostart will run VMware Horizon."
+        echo "On this final boot, root will auto-login, .bash_profile will run startx,"
+        echo ".xinitrc will launch openbox-session, and VMware Horizon will autostart."
         ;;
     *)
         echo "Unknown status. Exiting."
