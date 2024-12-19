@@ -113,12 +113,12 @@ case "$CURRENT_STATUS" in
         update
         ;;
     stage1)
-        installDisplayManagerComponents
-        installVMwareHorizonClient
-        ;;
-    stage2)
         installOpenSSH
         configureDomainAndSoftware
+        ;;
+    stage2)
+        installDisplayManagerComponents
+        installVMwareHorizonClient
         ;;
     stage3)
         echo "The script '$0' has completed all stages."
