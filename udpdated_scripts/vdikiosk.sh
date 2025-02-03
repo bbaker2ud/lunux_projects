@@ -11,8 +11,6 @@
 # The script tracks progress through a status log (/root/status.log) so that
 # if a reboot occurs, it will continue where it left off.
 #
-# NOTE: Some functions (e.g., setupAutoLogin and installOpenSSH) are defined 
-#       but not invoked in the current workflow.
 #
 # Run this script as root.
 # =============================================================================
@@ -54,7 +52,6 @@ fi
 # =============================================================================
 # Function: setupAutoLogin
 # Purpose: Configure systemd for auto-login as root on tty1.
-# Note: This function is currently defined but not called.
 # =============================================================================
 setupAutoLogin() {
   # Remove root password (if desired) and configure auto-login for tty1.
@@ -221,6 +218,7 @@ case "$CURRENT_STATUS" in
   stage1)
     installDisplayManagerComponents
     installVMwareHorizonClient
+    installOpenSSH
     reconfigureBashProfile
     ;;
   stage2)
