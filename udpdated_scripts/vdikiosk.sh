@@ -216,6 +216,7 @@ EOF
 case "$CURRENT_STATUS" in
   stage0)
     update
+    setupAutoLogin
     ;;
   stage1)
     installDisplayManagerComponents
