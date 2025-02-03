@@ -1,12 +1,12 @@
 #!/bin/bash
 # =============================================================================
-# Multi-Stage System Setup Script for a Fresh Ubuntu 20.04 LTS Server
+# Multi-Stage VDI-Kiosk Setup Script for a clean installation Ubuntu 20.04 LTS Server
 #
 # This script performs a staged system configuration that:
 #   - Updates the system packages.
 #   - Configures auto-login for the root user.
 #   - Installs display manager components (Xorg, Openbox, etc.).
-#   - Downloads and installs the VMware Horizon Client.
+#   - Downloads and installs the VMware Horizon Client (if not already installed).
 #   - Installs and configures the OpenSSH server (with UFW) for remote management.
 #   - Reconfigures /root/.bash_profile to automatically start X if needed.
 #
@@ -25,8 +25,11 @@ set -euo pipefail
 # Global Constants and Variables
 # -------------------------------
 BASH_PROFILE="/root/.bash_profile"      # Root user’s bash profile
-SCRIPT_PROFILE="$(readlink -f "$0")"    # Reference to this script file
+SCRIPT_PROFILE="$(readlink -f "$0")"    # Absolute path to this script file
 STATUS_LOG="/root/status.log"           # File to store the current stage
+
+# Allowed status values
+ALLOWED_STAGES=("stage0" "stage1" "stage2" "stage3")
 
 # ----------------------------------------
 # Ensure the script is run with root privileges
@@ -39,7 +42,6 @@ fi
 # ----------------------------------------
 # Ensure the script is run from the /root directory
 # ----------------------------------------
-
 if [[ "$(pwd)" != "/root" ]]; then
   echo "Please run this script from the /root directory."
   exit 1
@@ -47,8 +49,7 @@ fi
 
 # ----------------------------------------
 # Initialize /root/.bash_profile if it does not exist.
-# (Here we simply store a reference to the script; this file will later be
-# reconfigured to auto-start X on login if conditions are met.)
+# (We strictly enforce configuration by writing a marker line later.)
 # ----------------------------------------
 if [[ ! -f "$BASH_PROFILE" ]]; then
   echo "$SCRIPT_PROFILE" > "$BASH_PROFILE"
@@ -57,10 +58,16 @@ fi
 
 # ----------------------------------------
 # Initialize or load the current status from STATUS_LOG.
-# If the file does not exist, we begin at "stage0".
+# Validate the status; if unexpected, back it up and default to stage0.
 # ----------------------------------------
 if [[ -f "$STATUS_LOG" ]]; then
   CURRENT_STATUS=$(cat "$STATUS_LOG")
+  if [[ ! " ${ALLOWED_STAGES[*]} " =~ " ${CURRENT_STATUS} " ]]; then
+    mv "$STATUS_LOG" "${STATUS_LOG}.backup_$(date +%s)"
+    echo "Unexpected status in log. Backing up and resetting to stage0."
+    CURRENT_STATUS="stage0"
+    echo "$CURRENT_STATUS" > "$STATUS_LOG"
+  fi
 else
   CURRENT_STATUS="stage0"
   echo "$CURRENT_STATUS" > "$STATUS_LOG"
@@ -71,28 +78,32 @@ fi
 # Function: setupAutoLogin
 # Purpose: Configure systemd to auto-login the root user on tty1.
 #
-# This function:
-#   - Removes the root password (if desired).
-#   - Creates an override file for the getty@tty1 service so that it launches
-#     a login session for root automatically.
-#
-# NOTE: Use this only in a controlled environment.
+# Checks if the root password is already disabled (using 'passwd -S root') and
+# then enforces a configuration file marked with BEGIN/END markers.
 # =============================================================================
 setupAutoLogin() {
   echo "Configuring auto-login for root on tty1..."
-  # Remove the root password (this may have security implications)
-  passwd -d root || { echo "Failed to remove root password."; return 1; }
-  
+
+  # Check if root password is already disabled.
+  if passwd -S root | grep -q "NP"; then
+    echo "Root password is already disabled."
+  else
+    echo "Disabling root password..."
+    passwd -d root || { echo "Failed to remove root password."; return 1; }
+  fi
+
   local override_dir="/etc/systemd/system/getty@tty1.service.d"
   local override_file="${override_dir}/override.conf"
-  
+
   mkdir -p "$override_dir" || { echo "Failed to create $override_dir"; return 1; }
-  
-  # Write the override file for auto-login on tty1
-  cat <<EOF > "$override_file"
+
+  # Use marker comments to strictly enforce configuration.
+  cat <<'EOF' > "$override_file"
+# BEGIN VDI-Kiosk AUTOLOGIN
 [Service]
 ExecStart=
-ExecStart=-/sbin/agetty --noissue --autologin root %I \$TERM
+ExecStart=-/sbin/agetty --noissue --autologin root %I $TERM
+# END VDI-Kiosk AUTOLOGIN
 EOF
 
   echo "Auto-login configured in $override_file."
@@ -101,33 +112,26 @@ EOF
 # =============================================================================
 # Function: update
 # Purpose: Create and run an update script to update, upgrade, and clean the system.
-#
-# This function:
-#   - Creates /root/scripts (if needed) and writes a short update script.
-#   - Executes the update script.
-#   - Sets the current stage to "stage1" in the status log.
-#
-# NOTE: The reboot is now controlled by the main execution flow.
 # =============================================================================
 update() {
   local updates_dir="/root/scripts"
   local updates_script="${updates_dir}/updates.sh"
-  
+
   echo "Creating directory $updates_dir (if it doesn't exist)..."
   mkdir -p "$updates_dir" || { echo "Failed to create $updates_dir"; return 1; }
-  
-  # Write the update script using a heredoc.
+
+  # Strictly enforce the update script (overwrite if exists).
   cat <<'EOF' > "$updates_script"
 #!/bin/bash
 apt update && apt -y dist-upgrade && apt -y autoremove
 EOF
-  
+
   chmod a+x "$updates_script" || { echo "Failed to set execute permissions on $updates_script"; return 1; }
-  
+
   echo "Running system update script..."
   "$updates_script"
-  
-  # Advance to stage1 after successful update.
+
+  # Advance to stage1 only after successful update.
   CURRENT_STATUS="stage1"
   echo "$CURRENT_STATUS : $(date)" | tee "$STATUS_LOG"
   echo "System updates completed."
@@ -136,34 +140,26 @@ EOF
 # =============================================================================
 # Function: installDisplayManagerComponents
 # Purpose: Install Xorg, Openbox, and related components, and configure Openbox.
-#
-# This function:
-#   - Installs packages required for a graphical environment.
-#   - Appends configuration settings to the Openbox autostart file that:
-#       * Set the screen resolution.
-#       * Disable screen blanking and power management.
-#       * Allow terminating X with Ctrl+Alt+Backspace.
-#       * Launch the VMware Horizon Client.
-#
-# NOTE: The current stage is advanced to "stage3" to indicate completion of this
-#       section (though further configuration is still performed in stage1).
 # =============================================================================
 installDisplayManagerComponents() {
   local autostart_file="/etc/xdg/openbox/autostart"
-  
+
   echo "Installing display manager components (Xorg, Openbox, etc.)..."
-  apt install -y xorg xserver-xorg x11-xserver-utils xinit openbox || {
-    echo "Failed to install display manager components."
-    return 1
-  }
-  
-  # Append configuration to the Openbox autostart file.
-  # This ensures that when Openbox starts, it sets the screen resolution,
-  # disables screen blanking/power management, and launches the VMware Horizon Client.
-  cat <<'EOF' >> "$autostart_file"
+  # Check if packages are installed; if so, log and skip installation.
+  if dpkg -l xorg openbox xserver-xorg x11-xserver-utils xinit 2>/dev/null | grep -q '^ii'; then
+    echo "Display manager packages appear to be already installed."
+  else
+    apt install -y xorg xserver-xorg x11-xserver-utils xinit openbox || {
+      echo "Failed to install display manager components."
+      return 1
+    }
+  fi
 
-# --- Openbox Autostart Configuration ---
+  # Use marker comments to ensure our configuration is added only once.
+  if ! grep -q "BEGIN VDI-Kiosk DISPLAY CONFIG" "$autostart_file" 2>/dev/null; then
+    cat <<'EOF' >> "$autostart_file"
 
+# BEGIN VDI-Kiosk DISPLAY CONFIG
 # Set screen resolution to 1920x1080
 xrandr -s 1920x1080
 
@@ -177,12 +173,15 @@ setxkbmap -option terminate:ctrl_alt_bksp
 
 # Launch VMware Horizon Client with specified options
 vmware-view --serverURL=vdigateway.udayton.edu --fullscreen --nomenubar --allSessionsDisconnectedBehavior='Logoff' --usbAutoConnectOnInsert='TRUE'
+# END VDI-Kiosk DISPLAY CONFIG
 EOF
+  else
+    echo "Display configuration already present in $autostart_file."
+  fi
 
-  # Advance the status to stage3 (final stage) for use after reboots.
+  # Advance the status to stage3 (for use on reboot).
   CURRENT_STATUS="stage3"
   echo "$CURRENT_STATUS : $(date)" | tee "$STATUS_LOG"
-  
   echo "Display manager components installed and configured."
   sleep 3
 }
@@ -192,17 +191,23 @@ EOF
 # Purpose: Download and install the VMware Horizon Client.
 # =============================================================================
 installVMwareHorizonClient() {
+  # Check if VMware Horizon Client is already installed.
+  if command -v vmware-view &>/dev/null; then
+    echo "VMware Horizon Client is already installed; skipping installation."
+    return 0
+  fi
+
   local bundle_url="https://download3.vmware.com/software/CART24FQ2_LIN64_2306/VMware-Horizon-Client-2306-8.10.0-21964631.x64.bundle"
   local bundle_file="VMware-Horizon-Client-2306-8.10.0-21964631.x64.bundle"
-  
+
   echo "Downloading VMware Horizon Client bundle..."
   wget "$bundle_url" -O "$bundle_file" || { echo "Failed to download VMware Horizon Client bundle"; return 1; }
-  
+
   chmod +x "$bundle_file" || { echo "Failed to set executable permission on $bundle_file"; return 1; }
-  
+
   echo "Installing VMware Horizon Client..."
   env TERM=dumb ./"$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; return 1; }
-  
+
   echo "VMware Horizon Client installed successfully."
   rm -f "$bundle_file"
   sleep 3
@@ -211,19 +216,31 @@ installVMwareHorizonClient() {
 # =============================================================================
 # Function: installOpenSSH
 # Purpose: Install and configure the OpenSSH server along with UFW for remote access.
-#
-# This function:
-#   - Installs the openssh-server package.
-#   - Configures UFW (Uncomplicated Firewall) to allow SSH connections.
 # =============================================================================
 installOpenSSH() {
-  echo "Installing OpenSSH server..."
-  apt install -y openssh-server || { echo "Failed to install OpenSSH server"; return 1; }
-  
-  echo "Configuring UFW to allow SSH connections..."
-  ufw allow ssh || { echo "Failed to configure UFW for SSH"; return 1; }
-  ufw --force enable || { echo "Failed to enable UFW"; return 1; }
-  
+  # Check if OpenSSH is already installed.
+  if dpkg -l openssh-server &>/dev/null && command -v sshd &>/dev/null; then
+    echo "OpenSSH server appears to be already installed."
+  else
+    echo "Installing OpenSSH server..."
+    apt install -y openssh-server || { echo "Failed to install OpenSSH server"; return 1; }
+  fi
+
+  echo "Verifying UFW status..."
+  # Check if UFW is active and if SSH is allowed.
+  if ufw status | grep -q "Status: active"; then
+    if ufw status | grep -q "22/tcp"; then
+      echo "UFW is active and SSH is already allowed."
+    else
+      echo "UFW is active but SSH is not allowed. Allowing SSH..."
+      ufw allow ssh || { echo "Failed to configure UFW for SSH"; return 1; }
+    fi
+  else
+    echo "UFW is not active. Enabling UFW and allowing SSH..."
+    ufw allow ssh || { echo "Failed to configure UFW for SSH"; return 1; }
+    ufw --force enable || { echo "Failed to enable UFW"; return 1; }
+  fi
+
   echo "OpenSSH server installed and firewall configured for SSH."
   sleep 3
 }
@@ -234,19 +251,25 @@ installOpenSSH() {
 #          - $DISPLAY is not set, and
 #          - The login is on VT1.
 #
-# After reconfiguring, this function issues a reboot.
+# After reconfiguring, this function issues a reboot after a short countdown.
 # =============================================================================
 reconfigureBashProfile() {
   echo "Reconfiguring $BASH_PROFILE to auto-start X on VT1 if no DISPLAY is set..."
-  
-  # Overwrite the bash profile with a condition to auto-launch X.
+
+  # Overwrite the bash profile with a strict configuration using markers.
   cat <<'EOF' > "$BASH_PROFILE"
+# BEGIN VDI-Kiosk BASH PROFILE CONFIG
 [[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && exec startx
+# END VDI-Kiosk BASH PROFILE CONFIG
 EOF
-  
+
   echo "$BASH_PROFILE has been reconfigured."
   sleep 3
-  echo "Rebooting to apply changes..."
+  echo "Rebooting to apply changes in 10 seconds. Press Ctrl+C to cancel."
+  for i in {10..1}; do
+    echo "$i..."
+    sleep 1
+  done
   reboot
 }
 
@@ -272,8 +295,11 @@ case "$CURRENT_STATUS" in
     echo "Starting Stage 0: System update and auto-login configuration."
     update
     setupAutoLogin
-    echo "Stage 0 complete. Rebooting now..."
-    sleep 3
+    echo "Stage 0 complete. Rebooting in 10 seconds..."
+    for i in {10..1}; do
+      echo "$i..."
+      sleep 1
+    done
     reboot
     ;;
   stage1)
@@ -281,17 +307,17 @@ case "$CURRENT_STATUS" in
     installDisplayManagerComponents
     installVMwareHorizonClient
     installOpenSSH
-    # The following function reconfigures bash_profile and reboots.
+    # This function reconfigures the bash profile and reboots.
     reconfigureBashProfile
     ;;
   stage2)
-    # Reserved for future functionality
     echo "Stage2 functionality is not implemented."
     ;;
   stage3)
-    echo "The script '$0' has finished its configuration."
+    echo "The script '$SCRIPT_PROFILE' has finished its configuration."
     ;;
   *)
-    echo "Unexpected status '$CURRENT_STATUS'. Something went wrong!"
+    echo "Unexpected status '$CURRENT_STATUS'. Exiting."
+    exit 1
     ;;
 esac
