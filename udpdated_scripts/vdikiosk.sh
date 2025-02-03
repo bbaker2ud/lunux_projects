@@ -13,7 +13,7 @@
 # The script tracks progress through a status log (/root/status.log) so that if
 # a reboot occurs, it continues where it left off.
 #
-# NOTE: This script must be run as root.
+# NOTE: This script must be run as root, from the /root directory.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ set -euo pipefail
 # Global Constants and Variables
 # -------------------------------
 BASH_PROFILE="/root/.bash_profile"      # Root user’s bash profile
-SCRIPT_PROFILE="./script.sh"            # Reference to this script file
+SCRIPT_PROFILE="$(readlink -f "$0")"    # Reference to this script file
 STATUS_LOG="/root/status.log"           # File to store the current stage
 
 # ----------------------------------------
@@ -33,6 +33,15 @@ STATUS_LOG="/root/status.log"           # File to store the current stage
 # ----------------------------------------
 if [[ $EUID -ne 0 ]]; then
   echo "This script must be run as root!"
+  exit 1
+fi
+
+# ----------------------------------------
+# Ensure the script is run from the /root directory
+# ----------------------------------------
+
+if [[ "$(pwd)" != "/root" ]]; then
+  echo "Please run this script from the /root directory."
   exit 1
 fi
 
