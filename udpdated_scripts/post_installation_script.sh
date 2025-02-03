@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # ==============================================================================
-# Script: Ubuntu 20.04 LTS Server Post-Installation Setup
+# Script: Ubuntu 20.04/22.04 Post-Installation Setup
 #
 # Purpose:
 #   - Create and configure an update script (and schedule it via cron).
@@ -31,8 +31,6 @@ fi
 
 # -------------------------------------------------------------------------------
 # Function: setup_update_script
-# Purpose: Creates the /root/scripts directory and an update script that
-#          performs an apt-get update, upgrade, and autoremove. Then runs it.
 # -------------------------------------------------------------------------------
 setup_update_script() {
   local script_dir="/root/scripts"
@@ -59,24 +57,17 @@ EOF
 
 # -------------------------------------------------------------------------------
 # Function: add_cronjob
-# Purpose: Schedules the update script to run monthly by appending a cron entry.
 # -------------------------------------------------------------------------------
 add_cronjob() {
   local cron_entry="0 0 1 * * /root/scripts/updates.sh"
   echo "Adding cron job for update script..."
-
-  # Append the cron entry if not already present
-  if ! grep -qF "$cron_entry" /var/spool/cron/crontabs/root 2>/dev/null; then
-    echo "$cron_entry" >> /var/spool/cron/crontabs/root
-    echo "Cron job added."
-  else
-    echo "Cron job already exists."
-  fi
+  # Use the crontab command to update the root crontab.
+  (crontab -l 2>/dev/null; echo "$cron_entry") | crontab -
+  echo "Cron job added."
 }
 
 # -------------------------------------------------------------------------------
 # Function: update_sudoers
-# Purpose: Appends specific entries to /etc/sudoers to grant required privileges.
 # -------------------------------------------------------------------------------
 update_sudoers() {
   echo "Updating /etc/sudoers with required entries..."
@@ -91,8 +82,6 @@ update_sudoers() {
 
 # -------------------------------------------------------------------------------
 # Function: install_realmd_and_join
-# Purpose: Installs realmd, discovers the Active Directory domain, and then
-#          interactively prompts the user to join the domain.
 # -------------------------------------------------------------------------------
 install_realmd_and_join() {
   echo "Installing realmd..."
@@ -103,7 +92,6 @@ install_realmd_and_join() {
   sleep 10
 
   local success=0
-  # Continue prompting until realm join succeeds.
   while [[ $success -lt 1 ]]; do
     echo "Please enter your UD username: "
     read -r -p "Username: " username
@@ -113,7 +101,6 @@ install_realmd_and_join() {
     echo
 
     echo "Attempting to join realm..."
-    # Pipe the password to the realm join command.
     if echo "$password" | realm join -U "$username" adws.udayton.edu; then
       success=1
       echo "Realm join successful."
@@ -125,7 +112,6 @@ install_realmd_and_join() {
 
 # -------------------------------------------------------------------------------
 # Function: configure_realm_permissions
-# Purpose: Allows domain users and a specific administrative group to log in.
 # -------------------------------------------------------------------------------
 configure_realm_permissions() {
   echo "Permitting domain user logins..."
@@ -138,7 +124,6 @@ configure_realm_permissions() {
 
 # -------------------------------------------------------------------------------
 # Function: update_pam_configuration
-# Purpose: Updates PAM to enable automatic creation of home directories.
 # -------------------------------------------------------------------------------
 update_pam_configuration() {
   echo "Updating PAM configuration to enable home directory creation..."
@@ -148,24 +133,21 @@ update_pam_configuration() {
 
 # -------------------------------------------------------------------------------
 # Function: install_pip_and_gdown
-# Purpose: Installs python3-pip and the Python package 'gdown' for downloading files.
 # -------------------------------------------------------------------------------
 install_pip_and_gdown() {
   echo "Installing python3-pip..."
   apt-get install -y python3-pip
 
   echo "Installing gdown via pip..."
-  pip install gdown
+  # Use python3 -m pip to ensure compatibility on both Ubuntu 20.04 and 22.04.
+  python3 -m pip install gdown
 }
 
 # -------------------------------------------------------------------------------
 # Function: download_and_install_falcon_sensor
-# Purpose: Downloads the Falcon Sensor using gdown, installs it, configures it,
-#          and starts the sensor service.
 # -------------------------------------------------------------------------------
 download_and_install_falcon_sensor() {
   echo "Downloading Falcon Sensor..."
-  # gdown downloads the file using its Google Drive file ID.
   gdown 1YnvSQmCgUE0lRs5Fauvfub_KsUhcnbCw
 
   echo "Installing Falcon Sensor..."
@@ -183,8 +165,6 @@ download_and_install_falcon_sensor() {
 
 # -------------------------------------------------------------------------------
 # Function: install_and_mount_cifs_share
-# Purpose: Installs CIFS utilities, creates a mount point, and then attempts to
-#          mount the network share (retrying until successful).
 # -------------------------------------------------------------------------------
 install_and_mount_cifs_share() {
   echo "Installing cifs-utils..."
@@ -209,9 +189,6 @@ install_and_mount_cifs_share() {
 
 # -------------------------------------------------------------------------------
 # Function: download_and_configure_ivanti_agent
-# Purpose: Creates a temporary working directory, retrieves the Ivanti Agent
-#          configuration script from the mounted share, sets up the firewall,
-#          and installs the Ivanti Agent.
 # -------------------------------------------------------------------------------
 download_and_configure_ivanti_agent() {
   echo "Creating temporary directory /tmp/ems..."
