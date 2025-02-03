@@ -31,8 +31,6 @@ fi
 
 # -------------------------------------------------------------------------------
 # Function: setup_update_script
-# Purpose: Creates the /root/scripts directory and an update script that
-#          performs an apt-get update, upgrade, and autoremove. Then runs it.
 # -------------------------------------------------------------------------------
 setup_update_script() {
   local script_dir="/root/scripts"
@@ -59,12 +57,11 @@ EOF
 
 # -------------------------------------------------------------------------------
 # Function: add_cronjob
-# Purpose: Schedules the update script to run monthly by merging a cron entry
-#          with the existing root crontab.
 # -------------------------------------------------------------------------------
 add_cronjob() {
   local cron_entry="0 0 1 * * /root/scripts/updates.sh"
   echo "Adding cron job for update script..."
+  # Use the crontab command to merge the new entry with existing cron jobs.
   if crontab -l 2>/dev/null | grep -qF "$cron_entry"; then
     echo "Cron job already exists."
   else
@@ -75,7 +72,6 @@ add_cronjob() {
 
 # -------------------------------------------------------------------------------
 # Function: update_sudoers
-# Purpose: Appends specific entries to /etc/sudoers to grant required privileges.
 # -------------------------------------------------------------------------------
 update_sudoers() {
   echo "Updating /etc/sudoers with required entries..."
@@ -89,11 +85,37 @@ update_sudoers() {
 }
 
 # -------------------------------------------------------------------------------
+# Function: verify_and_update_hostname
+# Purpose: Ensure the current hostname meets UD standards and that the same
+#          hostname is configured in Active Directory.
+# -------------------------------------------------------------------------------
+verify_and_update_hostname() {
+  local current_hostname
+  current_hostname=$(hostname)
+  echo "The current hostname is: $current_hostname"
+  
+  read -rp "Is this hostname in accordance with UD standards? (y/n): " hostname_confirm
+  if [[ "$hostname_confirm" != "y" && "$hostname_confirm" != "Y" ]]; then
+    read -rp "Enter the correct hostname as per UD standards: " new_hostname
+    hostnamectl set-hostname "$new_hostname"
+    echo "Hostname updated. New hostname is: $(hostname)"
+  fi
+  
+  # Verify that the Active Directory has been updated with the hostname.
+  read -rp "Please verify that the hostname '$(hostname)' is configured in Active Directory. Is it updated? (y/n): " ad_confirm
+  while [[ "$ad_confirm" != "y" && "$ad_confirm" != "Y" ]]; do
+    echo "Please update Active Directory accordingly."
+    read -rp "Once updated, confirm that the hostname '$(hostname)' is configured in AD (y/n): " ad_confirm
+  done
+}
+
+# -------------------------------------------------------------------------------
 # Function: install_realmd_and_join
-# Purpose: Installs realmd, discovers the Active Directory domain, and then
-#          interactively prompts the user to join the domain.
 # -------------------------------------------------------------------------------
 install_realmd_and_join() {
+  # First, verify and (if necessary) update the hostname.
+  verify_and_update_hostname
+
   echo "Installing realmd..."
   apt-get install -y realmd
 
@@ -112,6 +134,7 @@ install_realmd_and_join() {
     echo
 
     echo "Attempting to join realm..."
+    # Pipe the password to the realm join command.
     if echo "$password" | realm join -U "$username" adws.udayton.edu; then
       success=1
       echo "Realm join successful."
@@ -123,7 +146,6 @@ install_realmd_and_join() {
 
 # -------------------------------------------------------------------------------
 # Function: configure_realm_permissions
-# Purpose: Allows domain users and a specific administrative group to log in.
 # -------------------------------------------------------------------------------
 configure_realm_permissions() {
   echo "Permitting domain user logins..."
@@ -136,7 +158,6 @@ configure_realm_permissions() {
 
 # -------------------------------------------------------------------------------
 # Function: update_pam_configuration
-# Purpose: Updates PAM to enable automatic creation of home directories.
 # -------------------------------------------------------------------------------
 update_pam_configuration() {
   echo "Updating PAM configuration to enable home directory creation..."
@@ -146,7 +167,6 @@ update_pam_configuration() {
 
 # -------------------------------------------------------------------------------
 # Function: install_pip_and_gdown
-# Purpose: Installs python3-pip and the Python package 'gdown' for downloading files.
 # -------------------------------------------------------------------------------
 install_pip_and_gdown() {
   echo "Installing python3-pip..."
@@ -159,8 +179,6 @@ install_pip_and_gdown() {
 
 # -------------------------------------------------------------------------------
 # Function: download_and_install_falcon_sensor
-# Purpose: Downloads the Falcon Sensor using gdown, installs it, configures it,
-#          and starts the sensor service.
 # -------------------------------------------------------------------------------
 download_and_install_falcon_sensor() {
   echo "Downloading Falcon Sensor..."
@@ -182,8 +200,6 @@ download_and_install_falcon_sensor() {
 
 # -------------------------------------------------------------------------------
 # Function: install_and_mount_cifs_share
-# Purpose: Installs CIFS utilities, creates a mount point, and then attempts to
-#          mount the network share (retrying until successful).
 # -------------------------------------------------------------------------------
 install_and_mount_cifs_share() {
   echo "Installing cifs-utils..."
@@ -208,9 +224,6 @@ install_and_mount_cifs_share() {
 
 # -------------------------------------------------------------------------------
 # Function: download_and_configure_ivanti_agent
-# Purpose: Creates a temporary working directory, retrieves the Ivanti Agent
-#          configuration script from the mounted share, sets up the firewall,
-#          and installs the Ivanti Agent.
 # -------------------------------------------------------------------------------
 download_and_configure_ivanti_agent() {
   echo "Creating temporary directory /tmp/ems..."
