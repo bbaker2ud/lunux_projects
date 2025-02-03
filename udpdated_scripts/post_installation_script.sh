@@ -1,0 +1,265 @@
+#!/bin/bash
+set -euo pipefail
+IFS=$'\n\t'
+
+# ==============================================================================
+# Script: Ubuntu 20.04 LTS Server Post-Installation Setup
+#
+# Purpose:
+#   - Create and configure an update script (and schedule it via cron).
+#   - Update the sudoers file with specific user/group privileges.
+#   - Install and configure realmd; join the machine to the AD domain.
+#   - Permit domain and administrative logins.
+#   - Update PAM configuration to automatically create home directories.
+#   - Install python3-pip and gdown for downloading remote resources.
+#   - Download and install the Falcon Sensor.
+#   - Install CIFS utilities and mount a network share.
+#   - Retrieve and configure an Ivanti Agent via a script from the share.
+#   - Enable and configure the firewall.
+#   - Reboot the machine upon completion.
+#
+# IMPORTANT: This script must be run as root.
+# ==============================================================================
+ 
+# -------------------------------------------------------------------------------
+# Verify the script is run as root.
+# -------------------------------------------------------------------------------
+if [[ $EUID -ne 0 ]]; then
+  echo "Error: This script must be run as root."
+  exit 1
+fi
+
+# -------------------------------------------------------------------------------
+# Function: setup_update_script
+# Purpose: Creates the /root/scripts directory and an update script that
+#          performs an apt-get update, upgrade, and autoremove. Then runs it.
+# -------------------------------------------------------------------------------
+setup_update_script() {
+  local script_dir="/root/scripts"
+  local update_script="${script_dir}/updates.sh"
+
+  echo "Creating ${script_dir} directory (if it doesn't exist)..."
+  mkdir -p "$script_dir"
+
+  echo "Building update script at ${update_script}..."
+  cat <<'EOF' > "$update_script"
+#!/bin/bash
+apt-get update &&
+apt-get -y dist-upgrade &&
+apt-get -y autoremove
+EOF
+
+  echo "Setting execute permissions on ${update_script}..."
+  chmod a+x "$update_script"
+
+  echo "Running update script..."
+  "$update_script"
+  echo "Update script completed."
+}
+
+# -------------------------------------------------------------------------------
+# Function: add_cronjob
+# Purpose: Schedules the update script to run monthly by appending a cron entry.
+# -------------------------------------------------------------------------------
+add_cronjob() {
+  local cron_entry="0 0 1 * * /root/scripts/updates.sh"
+  echo "Adding cron job for update script..."
+
+  # Append the cron entry if not already present
+  if ! grep -qF "$cron_entry" /var/spool/cron/crontabs/root 2>/dev/null; then
+    echo "$cron_entry" >> /var/spool/cron/crontabs/root
+    echo "Cron job added."
+  else
+    echo "Cron job already exists."
+  fi
+}
+
+# -------------------------------------------------------------------------------
+# Function: update_sudoers
+# Purpose: Appends specific entries to /etc/sudoers to grant required privileges.
+# -------------------------------------------------------------------------------
+update_sudoers() {
+  echo "Updating /etc/sudoers with required entries..."
+  {
+    echo "administrator ALL=(ALL) ALL"
+    echo "landesk ALL=(ALL) NOPASSWD: ALL"
+    echo "Defaults:landesk !requiretty"
+    echo "%cas.role.administrators.casit.workstations@adws.udayton.edu ALL=(ALL) ALL"
+  } >> /etc/sudoers
+  echo "Sudoers updated."
+}
+
+# -------------------------------------------------------------------------------
+# Function: install_realmd_and_join
+# Purpose: Installs realmd, discovers the Active Directory domain, and then
+#          interactively prompts the user to join the domain.
+# -------------------------------------------------------------------------------
+install_realmd_and_join() {
+  echo "Installing realmd..."
+  apt-get install -y realmd
+
+  echo "Discovering realm for adws.udayton.edu..."
+  realm discover adws.udayton.edu
+  sleep 10
+
+  local success=0
+  # Continue prompting until realm join succeeds.
+  while [[ $success -lt 1 ]]; do
+    echo "Please enter your UD username: "
+    read -r -p "Username: " username
+
+    echo "Please enter your UD password: "
+    read -r -s password
+    echo
+
+    echo "Attempting to join realm..."
+    # Pipe the password to the realm join command.
+    if echo "$password" | realm join -U "$username" adws.udayton.edu; then
+      success=1
+      echo "Realm join successful."
+    else
+      echo "Realm join failed. Please try again."
+    fi
+  done
+}
+
+# -------------------------------------------------------------------------------
+# Function: configure_realm_permissions
+# Purpose: Allows domain users and a specific administrative group to log in.
+# -------------------------------------------------------------------------------
+configure_realm_permissions() {
+  echo "Permitting domain user logins..."
+  realm permit -g 'domain users@adws.udayton.edu'
+
+  echo "Permitting administrative logins..."
+  realm permit -g cas.role.administrators.casit.workstations@adws.udayton.edu
+  echo "Realm permissions configured."
+}
+
+# -------------------------------------------------------------------------------
+# Function: update_pam_configuration
+# Purpose: Updates PAM to enable automatic creation of home directories.
+# -------------------------------------------------------------------------------
+update_pam_configuration() {
+  echo "Updating PAM configuration to enable home directory creation..."
+  pam-auth-update --enable mkhomedir
+  echo "PAM configuration updated."
+}
+
+# -------------------------------------------------------------------------------
+# Function: install_pip_and_gdown
+# Purpose: Installs python3-pip and the Python package 'gdown' for downloading files.
+# -------------------------------------------------------------------------------
+install_pip_and_gdown() {
+  echo "Installing python3-pip..."
+  apt-get install -y python3-pip
+
+  echo "Installing gdown via pip..."
+  pip install gdown
+}
+
+# -------------------------------------------------------------------------------
+# Function: download_and_install_falcon_sensor
+# Purpose: Downloads the Falcon Sensor using gdown, installs it, configures it,
+#          and starts the sensor service.
+# -------------------------------------------------------------------------------
+download_and_install_falcon_sensor() {
+  echo "Downloading Falcon Sensor..."
+  # gdown downloads the file using its Google Drive file ID.
+  gdown 1YnvSQmCgUE0lRs5Fauvfub_KsUhcnbCw
+
+  echo "Installing Falcon Sensor..."
+  dpkg --install falcon-sensor_6.38.0-13501_amd64.deb
+
+  echo "Configuring Falcon Sensor..."
+  /opt/CrowdStrike/falconctl -s --cid=0FA34C2A8A4545FC9D85E072AFBABA4A-E7
+
+  echo "Starting Falcon Sensor service..."
+  systemctl start falcon-sensor
+
+  echo "Cleaning up installation file..."
+  rm -f falcon-sensor_6.38.0-13501_amd64.deb
+}
+
+# -------------------------------------------------------------------------------
+# Function: install_and_mount_cifs_share
+# Purpose: Installs CIFS utilities, creates a mount point, and then attempts to
+#          mount the network share (retrying until successful).
+# -------------------------------------------------------------------------------
+install_and_mount_cifs_share() {
+  echo "Installing cifs-utils..."
+  apt-get install -y cifs-utils
+
+  echo "Creating mount point /media/share..."
+  mkdir -p /media/share
+
+  local good=0
+  while [[ $good -lt 1 ]]; do
+    echo "Attempting to mount network share..."
+    if mount -v -t cifs -o rw,vers=3.0,username="$username",password="$password" \
+         //itsmldcs1.adws.udayton.edu/ldlogon/unix /media/share; then
+      good=1
+      echo "Network share mounted successfully."
+    else
+      echo "Mount failed; retrying in 5 seconds..."
+      sleep 5
+    fi
+  done
+}
+
+# -------------------------------------------------------------------------------
+# Function: download_and_configure_ivanti_agent
+# Purpose: Creates a temporary working directory, retrieves the Ivanti Agent
+#          configuration script from the mounted share, sets up the firewall,
+#          and installs the Ivanti Agent.
+# -------------------------------------------------------------------------------
+download_and_configure_ivanti_agent() {
+  echo "Creating temporary directory /tmp/ems..."
+  mkdir -p /tmp/ems
+
+  echo "Navigating to /tmp/ems..."
+  cd /tmp/ems
+
+  echo "Copying nixconfig.sh from network share..."
+  cp /media/share/nixconfig.sh /tmp/ems/nixconfig.sh
+
+  echo "Setting execute permissions on nixconfig.sh..."
+  chmod a+x /tmp/ems/nixconfig.sh
+
+  echo "Enabling UFW firewall..."
+  ufw enable
+
+  echo "Opening required ports (22, 9593, 9594, 9595 TCP & UDP)..."
+  ufw allow 22
+  ufw allow 9593
+  ufw allow 9594
+  ufw allow 9595/tcp
+  ufw allow 9595/udp
+  echo "Firewall configuration complete."
+
+  echo "Installing Ivanti Agent..."
+  /tmp/ems/nixconfig.sh -p -a itsmldcs1.adws.udayton.edu -i all -k ea67f4cd.0
+  echo "Ivanti Agent installation complete."
+}
+
+# -------------------------------------------------------------------------------
+# Main function: Executes all steps in order.
+# -------------------------------------------------------------------------------
+main() {
+  setup_update_script
+  add_cronjob
+  update_sudoers
+  install_realmd_and_join
+  configure_realm_permissions
+  update_pam_configuration
+  install_pip_and_gdown
+  download_and_install_falcon_sensor
+  install_and_mount_cifs_share
+  download_and_configure_ivanti_agent
+
+  echo "All tasks completed successfully. Rebooting now..."
+  reboot now
+}
+
+# Execute the main routine.
+main
