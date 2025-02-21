@@ -206,17 +206,19 @@ installVMwareHorizonClient() {
 
   chmod +x "$bundle_file" || { echo "Failed to set executable permission on $bundle_file"; return 1; }
 
-  echo "Ensuring Python 3.10 and venv module are installed..."
-  if ! command -v python3.10 &>/dev/null; then
-    echo "Python 3.10 not found. Installing it now..."
-    sudo apt update && sudo apt install -y python3.10 python3.10-venv || { echo "Failed to install Python 3.10"; return 1; }
-  fi
+  echo "Ensuring Python 3.10, venv module, and pip are installed..."
+  sudo apt update
+  sudo apt install -y python3.10 python3.10-venv python3.10-distutils python3-pip || { echo "Failed to install required Python 3.10 packages"; return 1; }
 
   echo "Creating a Python 3.10 virtual environment..."
-  python3.10 -m venv "$venv_dir"
+  python3.10 -m venv "$venv_dir" || { echo "Failed to create Python 3.10 virtual environment"; return 1; }
 
   echo "Activating the virtual environment..."
   source "$venv_dir/bin/activate"
+
+  echo "Upgrading pip inside the virtual environment..."
+  python -m ensurepip --default-pip || { echo "Failed to bootstrap pip"; deactivate; return 1; }
+  python -m pip install --upgrade pip || { echo "Failed to upgrade pip"; deactivate; return 1; }
 
   echo "Installing VMware Horizon Client using Python 3.10 virtual environment..."
   PYTHON="$venv_dir/bin/python" "$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; deactivate; return 1; }
@@ -231,6 +233,7 @@ installVMwareHorizonClient() {
   echo "VMware Horizon Client installed successfully."
   sleep 3
 }
+
 
 
 
