@@ -198,34 +198,19 @@ installVMwareHorizonClient() {
   fi
 
   local bundle_url="https://download3.vmware.com/software/CART24FQ2_LIN64_2306/VMware-Horizon-Client-2306-8.10.0-21964631.x64.bundle"
-  local bundle_file="VMware-Horizon-Client-2306-8.10.0-21964631.x64.bundle"
-  local venv_dir="/tmp/vmware-horizon-venv"
+  local bundle_file="/tmp/VMware-Horizon-Client.bundle"
 
   echo "Downloading VMware Horizon Client bundle..."
   wget "$bundle_url" -O "$bundle_file" || { echo "Failed to download VMware Horizon Client bundle"; return 1; }
 
   chmod +x "$bundle_file" || { echo "Failed to set executable permission on $bundle_file"; return 1; }
 
-  echo "Ensuring Python 3.10, venv module, and pip are installed..."
+  echo "Ensuring Python 3.10 and required dependencies are installed..."
   sudo apt update
   sudo apt install -y python3.10 python3.10-venv python3.10-distutils python3-pip || { echo "Failed to install required Python 3.10 packages"; return 1; }
 
-  echo "Creating a Python 3.10 virtual environment..."
-  python3.10 -m venv "$venv_dir" || { echo "Failed to create Python 3.10 virtual environment"; return 1; }
-
-  echo "Activating the virtual environment..."
-  source "$venv_dir/bin/activate"
-
-  echo "Upgrading pip inside the virtual environment..."
-  python -m ensurepip --default-pip || { echo "Failed to bootstrap pip"; deactivate; return 1; }
-  python -m pip install --upgrade pip || { echo "Failed to upgrade pip"; deactivate; return 1; }
-
-  echo "Installing VMware Horizon Client using Python 3.10 virtual environment..."
-  PYTHON="$venv_dir/bin/python" "$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; deactivate; return 1; }
-
-  echo "Deactivating and removing virtual environment..."
-  deactivate
-  rm -rf "$venv_dir"
+  echo "Running VMware Horizon Client installer..."
+  sudo PYTHON=python3.10 sh "$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; return 1; }
 
   echo "Cleaning up installation files..."
   rm -f "$bundle_file"
