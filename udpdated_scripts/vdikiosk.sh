@@ -199,36 +199,39 @@ installVMwareHorizonClient() {
 
   local bundle_url="https://download3.vmware.com/software/CART24FQ2_LIN64_2306/VMware-Horizon-Client-2306-8.10.0-21964631.x64.bundle"
   local bundle_file="VMware-Horizon-Client-2306-8.10.0-21964631.x64.bundle"
-  local extract_dir="/tmp/vmware-horizon"
+  local venv_dir="/tmp/vmware-horizon-venv"
 
   echo "Downloading VMware Horizon Client bundle..."
   wget "$bundle_url" -O "$bundle_file" || { echo "Failed to download VMware Horizon Client bundle"; return 1; }
 
   chmod +x "$bundle_file" || { echo "Failed to set executable permission on $bundle_file"; return 1; }
 
-  echo "Extracting VMware Horizon Client installer..."
-  mkdir -p "$extract_dir"
-  "$bundle_file" --extract "$extract_dir" || { echo "Failed to extract installer"; return 1; }
-
-  echo "Patching Python scripts to replace 'import imp' with 'import importlib'..."
-  find "$extract_dir" -type f -name "*.py" -exec sed -i 's/import imp/import importlib/g' {} +
-
-  echo "Ensuring Python 3.10 is installed..."
+  echo "Ensuring Python 3.10 and venv module are installed..."
   if ! command -v python3.10 &>/dev/null; then
     echo "Python 3.10 not found. Installing it now..."
-    sudo apt update && sudo apt install -y python3.10 || { echo "Failed to install Python 3.10"; return 1; }
+    sudo apt update && sudo apt install -y python3.10 python3.10-venv || { echo "Failed to install Python 3.10"; return 1; }
   fi
 
-  echo "Installing VMware Horizon Client using Python 3.10..."
-  PYTHON=python3.10 "$extract_dir/vmware-installer/vmware-installer.py" --console --required || { echo "VMware Horizon Client installation failed"; return 1; }
+  echo "Creating a Python 3.10 virtual environment..."
+  python3.10 -m venv "$venv_dir"
+
+  echo "Activating the virtual environment..."
+  source "$venv_dir/bin/activate"
+
+  echo "Installing VMware Horizon Client using Python 3.10 virtual environment..."
+  PYTHON="$venv_dir/bin/python" "$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; deactivate; return 1; }
+
+  echo "Deactivating and removing virtual environment..."
+  deactivate
+  rm -rf "$venv_dir"
 
   echo "Cleaning up installation files..."
-  rm -rf "$extract_dir"
   rm -f "$bundle_file"
 
   echo "VMware Horizon Client installed successfully."
   sleep 3
 }
+
 
 
 # =============================================================================
