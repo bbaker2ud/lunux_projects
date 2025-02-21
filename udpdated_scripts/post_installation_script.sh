@@ -258,6 +258,13 @@ download_and_configure_ivanti_agent() {
 # Main function: Executes all steps in order.
 # -------------------------------------------------------------------------------
 main() {
+  local FLAG_FILE="/root/.setup_complete"
+
+  if [[ -f "$FLAG_FILE" ]]; then
+    echo "Setup already completed. Exiting."
+    exit 0
+  fi
+
   setup_update_script
   add_cronjob
   update_sudoers
@@ -269,9 +276,13 @@ main() {
   install_and_mount_cifs_share
   download_and_configure_ivanti_agent
 
-  echo "All tasks completed successfully. Rebooting now..."
+  echo "All tasks completed successfully. Marking setup as complete."
+  touch "$FLAG_FILE"
+
+  echo "Rebooting now..."
   reboot now
 }
+
 
 # Execute the main routine.
 main
