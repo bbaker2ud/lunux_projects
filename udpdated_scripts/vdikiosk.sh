@@ -295,12 +295,19 @@ case "$CURRENT_STATUS" in
     echo "Starting Stage 0: System update and auto-login configuration."
     update
     setupAutoLogin
-    echo "Stage 0 complete. Rebooting in 10 seconds..."
+
+    # Correctly advance to the next stage before rebooting
+    CURRENT_STATUS="stage1"
+    echo "$CURRENT_STATUS" > "$STATUS_LOG"
+
+    echo "Stage 0 complete. Advancing to Stage 1 on next boot. Rebooting in 10 seconds..."
     for i in {10..1}; do
       echo "$i..."
       sleep 1
     done
+
     reboot
+
     ;;
   stage1)
     echo "Starting Stage 1: Installing display manager components, VMware Horizon Client, and OpenSSH."
