@@ -205,13 +205,20 @@ installVMwareHorizonClient() {
 
   chmod +x "$bundle_file" || { echo "Failed to set executable permission on $bundle_file"; return 1; }
 
-  echo "Installing VMware Horizon Client..."
-  env TERM=dumb ./"$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; return 1; }
+  # Ensure Python 3.10 is installed
+  if ! command -v python3.10 &>/dev/null; then
+    echo "Python 3.10 is not installed. Installing it now..."
+    sudo apt update && sudo apt install -y python3.10 || { echo "Failed to install Python 3.10"; return 1; }
+  fi
+
+  echo "Installing VMware Horizon Client using Python 3.10..."
+  PYTHON=python3.10 env TERM=dumb ./"$bundle_file" --console --required || { echo "VMware Horizon Client installation failed"; return 1; }
 
   echo "VMware Horizon Client installed successfully."
   rm -f "$bundle_file"
   sleep 3
 }
+
 
 # =============================================================================
 # Function: installOpenSSH
